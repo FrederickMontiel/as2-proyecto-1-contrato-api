@@ -1,0 +1,14 @@
+node_modules/
+
+# Fuera de alcance del Proyecto 1 (enunciado, sección 4: "Queda fuera de esta
+# entrega: Servidor HTTP o API implementada. Base de datos, ORM o
+# persistencia real"). Estos archivos existen en disco como herramienta local
+# de prueba del contrato, pero no se versionan en el repositorio de la
+# entrega E5.
+src/servidor/
+src/db/
+src/dominio/
+src/util/
+data/
+pruebas/postman/SGMC-Servidor-Real.postman_collection.json
+pruebas/postman/SGMC-Servidor-Real.postman_environment.json
