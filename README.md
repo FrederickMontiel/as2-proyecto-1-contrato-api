@@ -42,6 +42,19 @@ npm run typecheck     # TypeScript en modo strict
 Este entregable (E5) diseña el contrato; no implementa servidor, base de
 datos ni autenticación (fuera de alcance del Proyecto 1).
 
+## Servidor de pruebas (local, fuera del alcance de E5)
+
+Este directorio de trabajo incluye además un servidor HTTP local con
+persistencia en CSV que solo sirve para ejercer los cálculos del contrato
+(plan de amortización, mora, prelación de pagos, cierres, cartera en
+riesgo) mientras se desarrolla. No forma parte de este repositorio ni del
+Entregable E5 (sección 4 del enunciado): el contrato sigue siendo la única
+fuente de verdad.
+
+```bash
+npm run server     # http://127.0.0.1:4000 — datos en ./data/*.csv
+```
+
 ## Decisiones de negocio fijadas en el contrato
 
 - El dinero nunca viaja como número JSON: siempre cadena decimal de 2
