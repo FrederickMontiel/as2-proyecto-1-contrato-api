@@ -58,3 +58,10 @@ datos ni autenticación (fuera de alcance del Proyecto 1).
 - `GET /cartera-riesgo` exige `fechaCorte` explícita (nunca "hoy" por
   omisión) y devuelve siempre lo dado por incobrable en el período junto al
   porcentaje.
+
+## Herramientas de IA utilizadas
+
+Se usó Claude Code (Anthropic) como asistente durante el diseño y la
+redacción del contrato: esquemas Zod, ensamblado del documento OpenAPI,
+ADR y la colección de Postman. Todo el contenido fue revisado y es
+defendible por el autor, conforme a la sección 13 del enunciado.
