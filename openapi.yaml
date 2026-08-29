@@ -1,0 +1,1854 @@
+openapi: 3.1.0
+info:
+  title: SGMC · API de Crédito Vecino, S. A.
+  version: 1.0.0
+  description: "Contrato del Sistema de Gestión de Microcrédito (Proyecto 1, entregable E5). Los esquemas se generan desde Zod: el contrato y la validación en ejecución son el mismo artefacto. En esta entrega solo se DISEÑA el contrato; no se implementa servidor, base de datos ni autenticación."
+  contact:
+    name: Análisis de Sistemas II (037) — UMG
+  license:
+    name: Uso académico
+servers:
+  - url: https://api.creditovecino.gt/v1
+    description: Producción (ficticia)
+tags:
+  - name: Clientes
+    description: Identidad del sujeto de crédito
+  - name: Solicitudes
+    description: "Originación: solicitud, evaluación, aprobación/rechazo"
+  - name: Créditos
+    description: Desembolso, consulta y plan de amortización
+  - name: Cartera y cobros
+    description: Registro de pagos y saldos
+  - name: Cierres e indicadores
+    description: Cierres diarios/mensuales y cartera en riesgo
+paths:
+  /clientes:
+    post:
+      tags:
+        - Clientes
+      operationId: registrarCliente
+      summary: Registra un cliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistrarClienteRequest"
+            examples:
+              clienteNuevo:
+                summary: Registro de cliente
+                value:
+                  nombre: Ana Gabriela Pérez López
+                  identificacion: 2547 78912 0101
+                  contacto:
+                    telefono: +502 5555-1234
+                    email: ana.perez@correo.gt
+      responses:
+        "201":
+          description: Cliente registrado
+          headers:
+            Location:
+              description: URI del cliente creado
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cliente"
+        "422":
+          description: El cuerpo es sintácticamente válido pero viola una regla del contrato o del dominio
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El cuerpo es sintácticamente válido pero viola una regla del contrato o del dominio
+                  value:
+                    type: https://api.creditovecino.gt/problemas/identificacion-duplicada
+                    title: Ya existe un cliente con esta identificación
+                    status: 422
+                    detail: La identificación '2547 78912 0101' ya está registrada para el cliente 'CL-042'.
+                    instance: /clientes
+                    traceId: 01J9Z4TC01
+  /clientes/{clienteId}:
+    get:
+      tags:
+        - Clientes
+      operationId: consultarCliente
+      summary: Consulta un cliente por su identificador
+      parameters:
+        - name: clienteId
+          in: path
+          required: true
+          description: Identificador del cliente
+          schema:
+            type: string
+            pattern: ^CL-\d{3,8}$
+            description: Identificador del cliente
+            examples:
+              - CL-042
+      responses:
+        "200":
+          description: Cliente encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cliente"
+              examples:
+                cliente:
+                  summary: Cliente registrado
+                  value:
+                    clienteId: CL-042
+                    nombre: Ana Gabriela Pérez López
+                    identificacion: 2547 78912 0101
+                    contacto:
+                      telefono: +502 5555-1234
+                      email: ana.perez@correo.gt
+                    registradoEn: 2026-08-10T09:00:00-06:00
+        "404":
+          description: El cliente no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El cliente no existe
+                  value:
+                    type: https://api.creditovecino.gt/problemas/cliente-no-encontrado
+                    title: El cliente no existe
+                    status: 404
+                    detail: No existe ningún cliente con el identificador 'CL-999'.
+                    instance: /clientes/CL-999
+                    traceId: 01J9Z4TC10
+  /solicitudes:
+    post:
+      tags:
+        - Solicitudes
+      operationId: crearSolicitud
+      summary: Crea una solicitud de crédito
+      description: El monto solicitado debe estar entre Q1,000.00 y Q25,000.00, con plazo de 3 a 24 meses.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CrearSolicitudRequest"
+            examples:
+              solicitudNueva:
+                summary: Solicitud de referencia
+                value:
+                  clienteId: CL-042
+                  montoSolicitado:
+                    valor: "8000.00"
+                    moneda: GTQ
+                  plazoMeses: 12
+                  proposito: Capital de trabajo para negocio de abarrotes
+      responses:
+        "201":
+          description: Solicitud creada
+          headers:
+            Location:
+              description: URI de la solicitud creada
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Solicitud"
+        "404":
+          description: El cliente referido no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El cliente referido no existe
+                  value:
+                    type: https://api.creditovecino.gt/problemas/cliente-no-encontrado
+                    title: El cliente no existe
+                    status: 404
+                    detail: No existe ningún cliente con el identificador 'CL-999'.
+                    instance: /solicitudes
+                    traceId: 01J9Z4TC20
+        "422":
+          description: El monto o el plazo están fuera del rango permitido por la política de producto
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El monto o el plazo están fuera del rango permitido por la política de producto
+                  value:
+                    type: https://api.creditovecino.gt/problemas/fuera-de-rango-producto
+                    title: Monto o plazo fuera del rango del producto
+                    status: 422
+                    detail: El monto solicitado 'Q30,000.00' excede el máximo de Q25,000.00 para microcrédito.
+                    instance: /solicitudes
+                    traceId: 01J9Z4TC21
+  /solicitudes/{solicitudId}:
+    get:
+      tags:
+        - Solicitudes
+      operationId: consultarSolicitud
+      summary: Consulta una solicitud por su identificador
+      parameters:
+        - name: solicitudId
+          in: path
+          required: true
+          description: Identificador de la solicitud
+          schema: &a1
+            type: string
+            pattern: ^SO-\d{3,8}$
+            description: Identificador de la solicitud de crédito
+            examples:
+              - SO-118
+      responses:
+        "200":
+          description: Solicitud encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Solicitud"
+              examples:
+                solicitud:
+                  summary: Solicitud aprobada
+                  value:
+                    solicitudId: SO-118
+                    clienteId: CL-042
+                    montoSolicitado:
+                      valor: "8000.00"
+                      moneda: GTQ
+                    plazoMeses: 12
+                    estado: aprobado
+                    creadoEn: 2026-08-15T10:30:00-06:00
+                    creditoId: C-004
+        "404":
+          description: La solicitud no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: La solicitud no existe
+                  value:
+                    type: https://api.creditovecino.gt/problemas/solicitud-no-encontrada
+                    title: La solicitud no existe
+                    status: 404
+                    detail: No existe ninguna solicitud con el identificador 'SO-999'.
+                    instance: /solicitudes/SO-999
+                    traceId: 01J9Z4TC30
+  /solicitudes/{solicitudId}/aprobacion:
+    post:
+      tags:
+        - Solicitudes
+      operationId: aprobarSolicitud
+      summary: Aprueba una solicitud de crédito
+      description: Decisión del Comité de Crédito. Requiere que la solicitud esté en estado 'solicitado' o 'en_evaluacion'.
+      parameters:
+        - name: solicitudId
+          in: path
+          required: true
+          description: Identificador de la solicitud
+          schema: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AprobarSolicitudRequest"
+            examples:
+              aprobacion:
+                summary: Aprobación con tasa de referencia
+                value:
+                  tasaAprobadaAnual: 0.36
+      responses:
+        "200":
+          description: Solicitud aprobada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Solicitud"
+        "404":
+          description: La solicitud no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: La solicitud no existe
+                  value:
+                    type: https://api.creditovecino.gt/problemas/solicitud-no-encontrada
+                    title: La solicitud no existe
+                    status: 404
+                    detail: No existe ninguna solicitud con el identificador 'SO-999'.
+                    instance: /solicitudes/SO-999/aprobacion
+                    traceId: 01J9Z4TC40
+        "409":
+          description: La solicitud ya fue decidida (aprobada o rechazada) previamente
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: La solicitud ya fue decidida (aprobada o rechazada) previamente
+                  value:
+                    type: https://api.creditovecino.gt/problemas/solicitud-ya-decidida
+                    title: La solicitud ya fue decidida
+                    status: 409
+                    detail: La solicitud 'SO-118' ya se encuentra en estado 'rechazado' y no admite una nueva decisión.
+                    instance: /solicitudes/SO-118/aprobacion
+                    traceId: 01J9Z4TC41
+  /solicitudes/{solicitudId}/rechazo:
+    post:
+      tags:
+        - Solicitudes
+      operationId: rechazarSolicitud
+      summary: Rechaza una solicitud de crédito
+      parameters:
+        - name: solicitudId
+          in: path
+          required: true
+          description: Identificador de la solicitud
+          schema: *a1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RechazarSolicitudRequest"
+            examples:
+              rechazo:
+                summary: Rechazo con motivo
+                value:
+                  motivo: Capacidad de pago insuficiente según política vigente
+      responses:
+        "200":
+          description: Solicitud rechazada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Solicitud"
+        "404":
+          description: La solicitud no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: La solicitud no existe
+                  value:
+                    type: https://api.creditovecino.gt/problemas/solicitud-no-encontrada
+                    title: La solicitud no existe
+                    status: 404
+                    detail: No existe ninguna solicitud con el identificador 'SO-999'.
+                    instance: /solicitudes/SO-999/rechazo
+                    traceId: 01J9Z4TC50
+        "409":
+          description: La solicitud ya fue decidida (aprobada o rechazada) previamente
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: La solicitud ya fue decidida (aprobada o rechazada) previamente
+                  value:
+                    type: https://api.creditovecino.gt/problemas/solicitud-ya-decidida
+                    title: La solicitud ya fue decidida
+                    status: 409
+                    detail: La solicitud 'SO-118' ya se encuentra en estado 'aprobado' y no admite una nueva decisión.
+                    instance: /solicitudes/SO-118/rechazo
+                    traceId: 01J9Z4TC51
+  /creditos/{creditoId}:
+    get:
+      tags:
+        - Créditos
+      operationId: consultarCredito
+      summary: Consulta un crédito por su identificador
+      parameters:
+        - name: creditoId
+          in: path
+          required: true
+          description: Identificador del crédito
+          schema: &a2
+            type: string
+            pattern: ^C-\d{3,8}$
+            description: Identificador del crédito
+            examples:
+              - C-004
+      responses:
+        "200":
+          description: Crédito encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credito"
+              examples:
+                credito:
+                  summary: Crédito vigente
+                  value:
+                    creditoId: C-004
+                    clienteId: CL-042
+                    solicitudId: SO-118
+                    estado: vigente
+                    tramoMora: ninguno
+                    diasAtraso: 0
+                    montoOriginal:
+                      valor: "8000.00"
+                      moneda: GTQ
+                    saldoCapital:
+                      valor: "6500.24"
+                      moneda: GTQ
+                    tasaAprobadaAnual: 0.36
+                    plazoMeses: 12
+                    fechaDesembolso: 2026-08-22
+                    creadoEn: 2026-08-15T10:30:00-06:00
+        "404":
+          description: El crédito no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El crédito no existe
+                  value:
+                    type: https://api.creditovecino.gt/problemas/credito-no-encontrado
+                    title: El crédito no existe
+                    status: 404
+                    detail: No existe ningún crédito con el identificador 'C-999'.
+                    instance: /creditos/C-999
+                    traceId: 01J9Z4TC60
+  /creditos/{creditoId}/desembolsos:
+    post:
+      tags:
+        - Créditos
+      operationId: desembolsarCredito
+      summary: Registra el desembolso de una solicitud aprobada y genera el plan de amortización
+      description: "Un crédito solo puede desembolsarse una vez: reintentar el desembolso de un crédito ya VIGENTE devuelve 409, no un desembolso duplicado."
+      parameters:
+        - name: creditoId
+          in: path
+          required: true
+          description: Identificador del crédito
+          schema: *a2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DesembolsarCreditoRequest"
+            examples:
+              desembolso:
+                summary: Desembolso
+                value:
+                  fechaDesembolso: 2026-08-22
+                  cuentaDestino: CTA-00981245
+      responses:
+        "201":
+          description: Crédito desembolsado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credito"
+        "404":
+          description: El crédito no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El crédito no existe
+                  value:
+                    type: https://api.creditovecino.gt/problemas/credito-no-encontrado
+                    title: El crédito no existe
+                    status: 404
+                    detail: No existe ningún crédito con el identificador 'C-999'.
+                    instance: /creditos/C-999/desembolsos
+                    traceId: 01J9Z4TC70
+        "409":
+          description: El crédito ya fue desembolsado o su estado no admite desembolso
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El crédito ya fue desembolsado o su estado no admite desembolso
+                  value:
+                    type: https://api.creditovecino.gt/problemas/estado-no-admite-desembolso
+                    title: El crédito no admite desembolso en su estado actual
+                    status: 409
+                    detail: El crédito 'C-004' ya se encuentra en estado 'vigente'.
+                    instance: /creditos/C-004/desembolsos
+                    traceId: 01J9Z4TC71
+  /creditos/{creditoId}/plan-amortizacion:
+    get:
+      tags:
+        - Créditos
+      operationId: consultarPlanAmortizacion
+      summary: Consulta el plan de amortización de un crédito desembolsado
+      parameters:
+        - name: creditoId
+          in: path
+          required: true
+          description: Identificador del crédito
+          schema: *a2
+      responses:
+        "200":
+          description: Plan de amortización
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanAmortizacionResponse"
+              examples:
+                plan:
+                  summary: Primeras cuotas de un plan a 12 meses (método francés)
+                  value:
+                    creditoId: C-004
+                    capital:
+                      valor: "8000.00"
+                      moneda: GTQ
+                    tasaMensual: 0.03
+                    numeroCuotas: 12
+                    cuotas:
+                      - numero: 1
+                        vencimiento: 2026-09-22
+                        saldoInicial:
+                          valor: "8000.00"
+                          moneda: GTQ
+                        cuota:
+                          valor: "804.16"
+                          moneda: GTQ
+                        interes:
+                          valor: "240.00"
+                          moneda: GTQ
+                        amortizacion:
+                          valor: "564.16"
+                          moneda: GTQ
+                        saldoFinal:
+                          valor: "7435.84"
+                          moneda: GTQ
+                        estado: pendiente
+        "404":
+          description: El crédito no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El crédito no existe
+                  value:
+                    type: https://api.creditovecino.gt/problemas/credito-no-encontrado
+                    title: El crédito no existe
+                    status: 404
+                    detail: No existe ningún crédito con el identificador 'C-999'.
+                    instance: /creditos/C-999/plan-amortizacion
+                    traceId: 01J9Z4TC80
+        "422":
+          description: El crédito aún no tiene plan de amortización porque no ha sido desembolsado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El crédito aún no tiene plan de amortización porque no ha sido desembolsado
+                  value:
+                    type: https://api.creditovecino.gt/problemas/credito-sin-plan
+                    title: El crédito no tiene plan de amortización
+                    status: 422
+                    detail: "El crédito 'C-010' está en estado 'aprobado': aún no fue desembolsado."
+                    instance: /creditos/C-010/plan-amortizacion
+                    traceId: 01J9Z4TC81
+  /creditos/{creditoId}/pagos:
+    post:
+      tags:
+        - Cartera y cobros
+      operationId: registrarPago
+      summary: Registra un pago sobre un crédito
+      description: "Aplica el pago en el orden de prelación (gastos → interés moratorio → interés corriente → capital) y devuelve el desglose. Operación NO idempotente por método: la idempotencia se obtiene con la cabecera Idempotency-Key."
+      parameters:
+        - name: creditoId
+          in: path
+          required: true
+          description: Identificador del crédito
+          schema: *a2
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Clave generada por el cliente. Si se reintenta el mismo pago con la misma clave y el mismo cuerpo, se devuelve la respuesta original (200) sin volver a cobrar.
+          schema:
+            type: string
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            description: Clave de idempotencia generada por el cliente (UUID v4). Reintentar la misma operación con la misma clave no debe repetir su efecto.
+            examples:
+              - 5b0b9e2e-6a1f-4a5c-9c1e-0d6d1a1f0b3a
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegistrarPagoRequest"
+            examples:
+              pagoExacto:
+                summary: Pago exacto de la cuota 2 vencida (caso de referencia)
+                value:
+                  monto:
+                    valor: "1011.88"
+                    moneda: GTQ
+                  fechaPago: 2026-08-22
+                  medio: agente_bancario
+                  referencia: BOL-88213
+              pagoParcial:
+                summary: Pago de menos (caso de referencia)
+                value:
+                  monto:
+                    valor: "500.00"
+                    moneda: GTQ
+                  fechaPago: 2026-08-22
+                  medio: efectivo
+              pagoDeMas:
+                summary: Pago de más (caso de referencia)
+                value:
+                  monto:
+                    valor: "3000.00"
+                    moneda: GTQ
+                  fechaPago: 2026-08-22
+                  medio: transferencia
+      responses:
+        "200":
+          description: "Reintento con la misma clave y el mismo contenido: se reproduce la respuesta original (reproducido = true). No se cobró de nuevo."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PagoRegistrado"
+              examples:
+                pagoReproducido:
+                  summary: Reintento con la misma Idempotency-Key
+                  value:
+                    pagoId: PG-2026-000731
+                    creditoId: C-004
+                    recibidoEn: 2026-08-22T09:15:00-06:00
+                    montoRecibido:
+                      valor: "1011.88"
+                      moneda: GTQ
+                    aplicacion:
+                      gastos: "0.00"
+                      interesMoratorio: "7.26"
+                      interesCorriente: "278.86"
+                      capital: "725.76"
+                      excedente: "0.00"
+                    saldoCapitalDespues:
+                      valor: "6500.24"
+                      moneda: GTQ
+                    estadoCredito: vigente
+                    tramoMora: ninguno
+                    diasAtraso: 0
+                    reproducido: true
+        "201":
+          description: Pago registrado por primera vez
+          headers:
+            Location:
+              description: URI del pago creado
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PagoRegistrado"
+              examples:
+                pagoNuevo:
+                  summary: Pago exacto de la cuota 2 vencida (caso de referencia)
+                  value:
+                    pagoId: PG-2026-000731
+                    creditoId: C-004
+                    recibidoEn: 2026-08-22T09:15:00-06:00
+                    montoRecibido:
+                      valor: "1011.88"
+                      moneda: GTQ
+                    aplicacion:
+                      gastos: "0.00"
+                      interesMoratorio: "7.26"
+                      interesCorriente: "278.86"
+                      capital: "725.76"
+                      excedente: "0.00"
+                    saldoCapitalDespues:
+                      valor: "6500.24"
+                      moneda: GTQ
+                    estadoCredito: vigente
+                    tramoMora: ninguno
+                    diasAtraso: 0
+                    reproducido: false
+        "404":
+          description: El crédito no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El crédito no existe
+                  value:
+                    type: https://api.creditovecino.gt/problemas/credito-no-encontrado
+                    title: El crédito no existe
+                    status: 404
+                    detail: No existe ningún crédito con el identificador 'C-999'.
+                    instance: /creditos/C-999/pagos
+                    traceId: 01J9Z4T900
+        "409":
+          description: "Conflicto: la clave de idempotencia se reutilizó con un contenido distinto, o el estado del crédito no admite pagos (p. ej. 'solicitado')."
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: "Conflicto: la clave de idempotencia se reutilizó con un contenido distinto, o el estado del crédito no admite pagos (p. ej. 'solicitado')."
+                  value:
+                    type: https://api.creditovecino.gt/problemas/clave-idempotencia-reutilizada
+                    title: Clave de idempotencia reutilizada con otro contenido
+                    status: 409
+                    detail: La clave 5b0b9e2e… se usó antes con un monto distinto.
+                    instance: /creditos/C-004/pagos
+                    traceId: 01J9Z4T8Q2
+        "422":
+          description: El cuerpo es sintácticamente válido pero viola una regla del contrato o del dominio
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El cuerpo es sintácticamente válido pero viola una regla del contrato o del dominio
+                  value:
+                    type: https://api.creditovecino.gt/problemas/estado-no-admite-pago
+                    title: El crédito no admite pagos en su estado actual
+                    status: 422
+                    detail: "El crédito 'C-010' está en estado 'solicitado': aún no fue desembolsado y no puede recibir pagos."
+                    instance: /creditos/C-010/pagos
+                    traceId: 01J9Z4T9K1
+        "429":
+          description: Demasiadas solicitudes
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: Demasiadas solicitudes
+                  value:
+                    type: https://api.creditovecino.gt/problemas/limite-excedido
+                    title: Demasiadas solicitudes en poco tiempo
+                    status: 429
+                    detail: Se superó el límite de 60 solicitudes por minuto para este cliente. Reintente tras 'Retry-After'.
+                    instance: /creditos/C-004/pagos
+                    traceId: 01J9Z4T9X7
+        "500":
+          description: Error no previsto del servidor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: Error no previsto del servidor
+                  value:
+                    type: https://api.creditovecino.gt/problemas/error-servidor
+                    title: Error no previsto del servidor
+                    status: 500
+                    detail: Ocurrió un error inesperado al procesar el pago. Consulte el traceId con soporte.
+                    instance: /creditos/C-004/pagos
+                    traceId: 01J9Z4TA02
+    get:
+      tags:
+        - Cartera y cobros
+      operationId: consultarPagos
+      summary: Lista los pagos registrados de un crédito
+      parameters:
+        - name: creditoId
+          in: path
+          required: true
+          description: Identificador del crédito
+          schema: *a2
+        - name: limite
+          in: query
+          required: false
+          schema:
+            default: 50
+            type: integer
+            minimum: 1
+            maximum: 200
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            description: Cursor opaco devuelto por la página anterior
+            type: string
+      responses:
+        "200":
+          description: Pagos del crédito
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListarPagosResponse"
+              examples:
+                pagos:
+                  summary: Historial con un pago registrado
+                  value:
+                    creditoId: C-004
+                    pagos:
+                      - pagoId: PG-2026-000731
+                        creditoId: C-004
+                        recibidoEn: 2026-08-22T09:15:00-06:00
+                        montoRecibido:
+                          valor: "1011.88"
+                          moneda: GTQ
+                        aplicacion:
+                          gastos: "0.00"
+                          interesMoratorio: "7.26"
+                          interesCorriente: "278.86"
+                          capital: "725.76"
+                          excedente: "0.00"
+                        saldoCapitalDespues:
+                          valor: "6500.24"
+                          moneda: GTQ
+                        estadoCredito: vigente
+                        tramoMora: ninguno
+                        diasAtraso: 0
+                        reproducido: false
+        "404":
+          description: El crédito no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El crédito no existe
+                  value:
+                    type: https://api.creditovecino.gt/problemas/credito-no-encontrado
+                    title: El crédito no existe
+                    status: 404
+                    detail: No existe ningún crédito con el identificador 'C-999'.
+                    instance: /creditos/C-999/pagos
+                    traceId: 01J9Z4TC90
+  /cierres/diarios:
+    post:
+      tags:
+        - Cierres e indicadores
+      operationId: generarCierreDiario
+      summary: Genera (o reproduce) el cierre diario de una fecha de corte
+      description: "Operación idempotente por fechaCorte: generar el cierre de una fecha ya cerrada devuelve el cierre existente, no un duplicado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerarCierreDiarioRequest"
+            examples:
+              cierre:
+                summary: Cierre diario
+                value:
+                  fechaCorte: 2026-08-22
+      responses:
+        "200":
+          description: "El cierre de esta fecha ya existía: se reproduce (reproducido = true), sin recalcular."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CierreResponse"
+              examples:
+                cierreReproducido:
+                  summary: Reintento del cierre diario
+                  value:
+                    cierreId: CI-2026-08-22-D
+                    tipo: diario
+                    fechaCorte: 2026-08-22
+                    carteraActiva:
+                      valor: "800000.00"
+                      moneda: GTQ
+                    saldoEnRiesgo:
+                      valor: "56000.00"
+                      moneda: GTQ
+                    dadoPorIncobrableEnElPeriodo:
+                      valor: "0.00"
+                      moneda: GTQ
+                    generadoEn: 2026-08-22T23:59:00-06:00
+                    reproducido: true
+        "201":
+          description: Cierre generado por primera vez
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CierreResponse"
+              examples:
+                cierreNuevo:
+                  summary: Cierre diario generado
+                  value:
+                    cierreId: CI-2026-08-22-D
+                    tipo: diario
+                    fechaCorte: 2026-08-22
+                    carteraActiva:
+                      valor: "800000.00"
+                      moneda: GTQ
+                    saldoEnRiesgo:
+                      valor: "56000.00"
+                      moneda: GTQ
+                    dadoPorIncobrableEnElPeriodo:
+                      valor: "0.00"
+                      moneda: GTQ
+                    generadoEn: 2026-08-22T23:59:00-06:00
+                    reproducido: false
+        "422":
+          description: La fecha de corte es futura o anterior a la puesta en marcha del Sistema
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: La fecha de corte es futura o anterior a la puesta en marcha del Sistema
+                  value:
+                    type: https://api.creditovecino.gt/problemas/fecha-fuera-de-rango
+                    title: Fecha de corte fuera del rango permitido
+                    status: 422
+                    detail: La fecha de corte no puede ser posterior a la fecha del día.
+                    instance: /cierres/diarios
+                    traceId: 01J9Z4TCA0
+  /cierres/mensuales:
+    post:
+      tags:
+        - Cierres e indicadores
+      operationId: generarCierreMensual
+      summary: Genera (o reproduce) el cierre mensual de un mes de corte
+      description: "Operación idempotente por mesCorte: generar el cierre de un mes ya cerrado devuelve el cierre existente, no un duplicado."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerarCierreMensualRequest"
+            examples:
+              cierre:
+                summary: Cierre mensual
+                value:
+                  mesCorte: 2026-08
+      responses:
+        "200":
+          description: "El cierre de este mes ya existía: se reproduce (reproducido = true), sin recalcular."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CierreResponse"
+              examples:
+                cierreReproducido:
+                  summary: Reintento del cierre mensual
+                  value:
+                    cierreId: CI-2026-08-M
+                    tipo: mensual
+                    fechaCorte: 2026-08-31
+                    carteraActiva:
+                      valor: "800000.00"
+                      moneda: GTQ
+                    saldoEnRiesgo:
+                      valor: "56000.00"
+                      moneda: GTQ
+                    dadoPorIncobrableEnElPeriodo:
+                      valor: "8000.00"
+                      moneda: GTQ
+                    generadoEn: 2026-08-31T23:59:00-06:00
+                    reproducido: true
+        "201":
+          description: Cierre generado por primera vez
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CierreResponse"
+              examples:
+                cierreNuevo:
+                  summary: Cierre mensual generado
+                  value:
+                    cierreId: CI-2026-08-M
+                    tipo: mensual
+                    fechaCorte: 2026-08-31
+                    carteraActiva:
+                      valor: "800000.00"
+                      moneda: GTQ
+                    saldoEnRiesgo:
+                      valor: "56000.00"
+                      moneda: GTQ
+                    dadoPorIncobrableEnElPeriodo:
+                      valor: "8000.00"
+                      moneda: GTQ
+                    generadoEn: 2026-08-31T23:59:00-06:00
+                    reproducido: false
+        "422":
+          description: El mes de corte es futuro o el mes aún no ha concluido
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: El mes de corte es futuro o el mes aún no ha concluido
+                  value:
+                    type: https://api.creditovecino.gt/problemas/mes-fuera-de-rango
+                    title: Mes de corte fuera del rango permitido
+                    status: 422
+                    detail: El mes de corte '2026-09' aún no ha concluido.
+                    instance: /cierres/mensuales
+                    traceId: 01J9Z4TCA1
+  /cartera-riesgo:
+    get:
+      tags:
+        - Cierres e indicadores
+      operationId: consultarCarteraEnRiesgo
+      summary: Consulta el indicador de cartera en riesgo a una fecha de corte
+      description: "Operación segura e idempotente. Devuelve siempre, junto al porcentaje, lo dado por incobrable en el período: reportar solo el indicador es engañoso."
+      parameters:
+        - name: fechaCorte
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+            description: Fecha calendario en formato AAAA-MM-DD
+            examples:
+              - 2026-08-22
+        - name: incluirReestructurados
+          in: query
+          required: false
+          schema:
+            description: Si se incluyen los créditos reestructurados en el saldo en riesgo. Por omisión true, conforme a la política institucional.
+            default: true
+            type: boolean
+      responses:
+        "200":
+          description: Indicador calculado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CarteraEnRiesgoResponse"
+              examples:
+                casoDeReferencia:
+                  summary: Caso de referencia (7.00 %)
+                  value:
+                    fechaCorte: 2026-08-22
+                    carteraActiva:
+                      valor: "800000.00"
+                      moneda: GTQ
+                    saldoEnRiesgo:
+                      valor: "56000.00"
+                      moneda: GTQ
+                    porcentajeEnRiesgo: 0.07
+                    dadoPorIncobrableEnElPeriodo:
+                      valor: "0.00"
+                      moneda: GTQ
+                    porTramo:
+                      - tramo: mora_2
+                        creditos: 1
+                        saldoCapital:
+                          valor: "24000.00"
+                          moneda: GTQ
+                      - tramo: mora_3
+                        creditos: 1
+                        saldoCapital:
+                          valor: "18000.00"
+                          moneda: GTQ
+                      - tramo: vencido
+                        creditos: 1
+                        saldoCapital:
+                          valor: "8000.00"
+                          moneda: GTQ
+                trasIncobrable:
+                  summary: Tras dar C-005 por incobrable (6.06 %)
+                  value:
+                    fechaCorte: 2026-08-23
+                    carteraActiva:
+                      valor: "792000.00"
+                      moneda: GTQ
+                    saldoEnRiesgo:
+                      valor: "48000.00"
+                      moneda: GTQ
+                    porcentajeEnRiesgo: 0.0606
+                    dadoPorIncobrableEnElPeriodo:
+                      valor: "8000.00"
+                      moneda: GTQ
+                    porTramo:
+                      - tramo: mora_2
+                        creditos: 1
+                        saldoCapital:
+                          valor: "24000.00"
+                          moneda: GTQ
+        "400":
+          description: Parámetros de consulta inválidos
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: Parámetros de consulta inválidos
+                  value:
+                    type: https://api.creditovecino.gt/problemas/validacion
+                    title: Parámetros de consulta inválidos
+                    status: 400
+                    detail: El parámetro 'fechaCorte' no cumple el formato AAAA-MM-DD.
+                    instance: /cartera-riesgo
+                    traceId: 01J9Z4TB14
+                    errores:
+                      - campo: fechaCorte
+                        mensaje: "Formato esperado: AAAA-MM-DD, p. ej. '2026-08-22'."
+        "422":
+          description: Fecha de corte fuera del rango permitido
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
+              examples:
+                caso:
+                  summary: Fecha de corte fuera del rango permitido
+                  value:
+                    type: https://api.creditovecino.gt/problemas/fecha-fuera-de-rango
+                    title: Fecha de corte fuera del rango permitido
+                    status: 422
+                    detail: La fecha de corte no puede ser posterior a la fecha del día ni anterior a la puesta en marcha del Sistema (01/01/2025).
+                    instance: /cartera-riesgo
+                    traceId: 01J9Z4TBZ3
+components:
+  schemas:
+    Dinero:
+      type: object
+      properties:
+        valor:
+          type: string
+          pattern: ^-?\d{1,13}\.\d{2}$
+          description: Importe como cadena decimal con 2 decimales exactos
+          examples:
+            - "1004.62"
+        moneda:
+          type: string
+          const: GTQ
+          description: Código ISO 4217. El Sistema opera únicamente en quetzales.
+          examples:
+            - GTQ
+      required:
+        - valor
+        - moneda
+      additionalProperties: false
+      description: Objeto de Valor monetario. La representación en el contrato es de cadena; internamente el núcleo usa decimal.js o centavos enteros.
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI que identifica el TIPO de problema. Es el identificador estable, no el mensaje.
+          examples:
+            - https://api.creditovecino.gt/problemas/clave-idempotencia-reutilizada
+        title:
+          type: string
+          examples:
+            - Clave de idempotencia reutilizada con otro contenido
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+          examples:
+            - 409
+        detail:
+          description: Explicación específica de ESTA ocurrencia. Nunca debe incluir datos sensibles de otro cliente.
+          examples:
+            - La clave 5b0b9e2e… se usó antes con un monto distinto.
+          type: string
+        instance:
+          description: URI de la ocurrencia concreta
+          examples:
+            - /creditos/C-004/pagos
+          type: string
+        traceId:
+          examples:
+            - 01J9Z4T8Q2
+          type: string
+        errores:
+          type: array
+          items:
+            type: object
+            properties:
+              campo:
+                type: string
+                examples:
+                  - monto.valor
+              mensaje:
+                type: string
+                examples:
+                  - Debe ser decimal de punto fijo con 2 decimales
+            required:
+              - campo
+              - mensaje
+            additionalProperties: false
+      required:
+        - type
+        - title
+        - status
+      additionalProperties: false
+      description: Cuerpo de error uniforme del Sistema, conforme a la RFC 9457 (application/problem+json).
+    Paginacion:
+      type: object
+      properties:
+        limite:
+          default: 50
+          type: integer
+          minimum: 1
+          maximum: 200
+        cursor:
+          description: Cursor opaco devuelto por la página anterior
+          type: string
+      required:
+        - limite
+      additionalProperties: false
+    EstadoCredito:
+      type: string
+      enum:
+        - solicitado
+        - aprobado
+        - vigente
+        - en_mora
+        - reestructurado
+        - rechazado
+        - anulado
+        - cancelado
+        - incobrable
+      description: Estado persistente del crédito.
+    TramoMora:
+      type: string
+      enum:
+        - ninguno
+        - mora_1
+        - mora_2
+        - mora_3
+        - vencido
+      description: Clasificación derivada de los días de atraso; se mueve en ambas direcciones.
+    Contacto:
+      type: object
+      properties:
+        telefono:
+          type: string
+          minLength: 8
+          maxLength: 20
+          examples:
+            - +502 5555-1234
+        email:
+          examples:
+            - cliente@correo.gt
+          type: string
+          format: email
+          pattern: ^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$
+        direccion:
+          examples:
+            - 0 avenida 0-00, zona 1, Guatemala
+          type: string
+          maxLength: 200
+      required:
+        - telefono
+      additionalProperties: false
+    RegistrarClienteRequest:
+      type: object
+      properties:
+        nombre:
+          type: string
+          minLength: 2
+          maxLength: 120
+          examples:
+            - Ana Gabriela Pérez López
+        identificacion:
+          type: string
+          minLength: 5
+          maxLength: 20
+          description: Documento Personal de Identificación (DPI) u otro identificador oficial
+          examples:
+            - 2547 78912 0101
+        contacto:
+          $ref: "#/components/schemas/Contacto"
+      required:
+        - nombre
+        - identificacion
+        - contacto
+      additionalProperties: false
+    Cliente:
+      type: object
+      properties:
+        clienteId:
+          type: string
+          pattern: ^CL-\d{3,8}$
+          description: Identificador del cliente
+          examples:
+            - CL-042
+        nombre:
+          type: string
+        identificacion:
+          type: string
+        contacto:
+          $ref: "#/components/schemas/Contacto"
+        registradoEn:
+          type: string
+          description: Instante en formato RFC 3339 con zona horaria
+          examples:
+            - 2026-08-22T09:15:00-06:00
+      required:
+        - clienteId
+        - nombre
+        - identificacion
+        - contacto
+        - registradoEn
+      additionalProperties: false
+    CrearSolicitudRequest:
+      type: object
+      properties:
+        clienteId:
+          type: string
+          pattern: ^CL-\d{3,8}$
+          description: Identificador del cliente
+          examples:
+            - CL-042
+        montoSolicitado:
+          description: Debe estar entre Q1,000.00 y Q25,000.00
+          $ref: "#/components/schemas/Dinero"
+        plazoMeses:
+          type: integer
+          minimum: 3
+          maximum: 24
+          examples:
+            - 12
+        proposito:
+          examples:
+            - Capital de trabajo para negocio de abarrotes
+          type: string
+          maxLength: 200
+      required:
+        - clienteId
+        - montoSolicitado
+        - plazoMeses
+      additionalProperties: false
+    EstadoSolicitud:
+      type: string
+      enum:
+        - solicitado
+        - en_evaluacion
+        - aprobado
+        - rechazado
+    Solicitud:
+      type: object
+      properties:
+        solicitudId:
+          type: string
+          pattern: ^SO-\d{3,8}$
+          description: Identificador de la solicitud de crédito
+          examples:
+            - SO-118
+        clienteId:
+          type: string
+          pattern: ^CL-\d{3,8}$
+          description: Identificador del cliente
+          examples:
+            - CL-042
+        montoSolicitado:
+          $ref: "#/components/schemas/Dinero"
+        plazoMeses:
+          type: integer
+          minimum: 3
+          maximum: 24
+        estado:
+          $ref: "#/components/schemas/EstadoSolicitud"
+        creadoEn:
+          type: string
+          description: Instante en formato RFC 3339 con zona horaria
+          examples:
+            - 2026-08-22T09:15:00-06:00
+        creditoId:
+          description: Se agrega solo si la solicitud fue aprobada y desembolsada
+          type: string
+          pattern: ^C-\d{3,8}$
+          examples:
+            - C-004
+      required:
+        - solicitudId
+        - clienteId
+        - montoSolicitado
+        - plazoMeses
+        - estado
+        - creadoEn
+      additionalProperties: false
+    AprobarSolicitudRequest:
+      type: object
+      properties:
+        tasaAprobadaAnual:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: TNA (tasa nominal anual) aprobada por el Comité, como fracción decimal
+          examples:
+            - 0.36
+        comentario:
+          type: string
+          maxLength: 300
+      required:
+        - tasaAprobadaAnual
+      additionalProperties: false
+    RechazarSolicitudRequest:
+      type: object
+      properties:
+        motivo:
+          type: string
+          minLength: 3
+          maxLength: 300
+          examples:
+            - Capacidad de pago insuficiente según política vigente
+      required:
+        - motivo
+      additionalProperties: false
+    DesembolsarCreditoRequest:
+      type: object
+      properties:
+        fechaDesembolso:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Fecha calendario en formato AAAA-MM-DD
+          examples:
+            - 2026-08-22
+        cuentaDestino:
+          description: Cuenta o medio por el que se entrega el desembolso
+          type: string
+          maxLength: 40
+      required:
+        - fechaDesembolso
+      additionalProperties: false
+    Credito:
+      type: object
+      properties:
+        creditoId:
+          type: string
+          pattern: ^C-\d{3,8}$
+          description: Identificador del crédito
+          examples:
+            - C-004
+        clienteId:
+          type: string
+          pattern: ^CL-\d{3,8}$
+          description: Identificador del cliente
+          examples:
+            - CL-042
+        solicitudId:
+          type: string
+          pattern: ^SO-\d{3,8}$
+          description: Identificador de la solicitud de crédito
+          examples:
+            - SO-118
+        estado:
+          $ref: "#/components/schemas/EstadoCredito"
+        tramoMora:
+          $ref: "#/components/schemas/TramoMora"
+        diasAtraso:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        montoOriginal:
+          $ref: "#/components/schemas/Dinero"
+        saldoCapital:
+          $ref: "#/components/schemas/Dinero"
+        tasaAprobadaAnual:
+          type: number
+          minimum: 0
+          maximum: 1
+          examples:
+            - 0.36
+        plazoMeses:
+          type: integer
+          minimum: 3
+          maximum: 24
+        fechaDesembolso:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Fecha calendario en formato AAAA-MM-DD
+          examples:
+            - 2026-08-22
+        creadoEn:
+          type: string
+          description: Instante en formato RFC 3339 con zona horaria
+          examples:
+            - 2026-08-22T09:15:00-06:00
+      required:
+        - creditoId
+        - clienteId
+        - solicitudId
+        - estado
+        - tramoMora
+        - diasAtraso
+        - montoOriginal
+        - saldoCapital
+        - tasaAprobadaAnual
+        - plazoMeses
+        - creadoEn
+      additionalProperties: false
+    Cuota:
+      type: object
+      properties:
+        numero:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        vencimiento:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Fecha calendario en formato AAAA-MM-DD
+          examples:
+            - 2026-08-22
+        saldoInicial:
+          $ref: "#/components/schemas/Dinero"
+        cuota:
+          $ref: "#/components/schemas/Dinero"
+        interes:
+          $ref: "#/components/schemas/Dinero"
+        amortizacion:
+          $ref: "#/components/schemas/Dinero"
+        saldoFinal:
+          $ref: "#/components/schemas/Dinero"
+        estado:
+          type: string
+          enum:
+            - pendiente
+            - pagada
+            - vencida
+      required:
+        - numero
+        - vencimiento
+        - saldoInicial
+        - cuota
+        - interes
+        - amortizacion
+        - saldoFinal
+        - estado
+      additionalProperties: false
+    PlanAmortizacionResponse:
+      type: object
+      properties:
+        creditoId:
+          type: string
+          pattern: ^C-\d{3,8}$
+          description: Identificador del crédito
+          examples:
+            - C-004
+        capital:
+          $ref: "#/components/schemas/Dinero"
+        tasaMensual:
+          type: number
+          minimum: 0
+          maximum: 1
+          examples:
+            - 0.03
+        numeroCuotas:
+          type: integer
+          minimum: 3
+          maximum: 24
+        cuotas:
+          type: array
+          items:
+            $ref: "#/components/schemas/Cuota"
+      required:
+        - creditoId
+        - capital
+        - tasaMensual
+        - numeroCuotas
+        - cuotas
+      additionalProperties: false
+    MedioDePago:
+      type: string
+      enum:
+        - efectivo
+        - agente_bancario
+        - transferencia
+        - tarjeta
+      description: Canal por el que se recibió el pago
+    RegistrarPagoRequest:
+      type: object
+      properties:
+        monto:
+          $ref: "#/components/schemas/Dinero"
+        fechaPago:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Fecha calendario en formato AAAA-MM-DD
+          examples:
+            - 2026-08-22
+        medio:
+          $ref: "#/components/schemas/MedioDePago"
+        referencia:
+          description: Referencia externa del pago (boleta, autorización, etc.)
+          examples:
+            - BOL-88213
+          type: string
+          maxLength: 40
+      required:
+        - monto
+        - fechaPago
+        - medio
+      additionalProperties: false
+    AplicacionDelPago:
+      type: object
+      properties:
+        gastos:
+          type: string
+          pattern: ^-?\d{1,13}\.\d{2}$
+          description: Importe como cadena decimal con 2 decimales exactos
+          examples:
+            - "0.00"
+        interesMoratorio:
+          type: string
+          pattern: ^-?\d{1,13}\.\d{2}$
+          description: Importe como cadena decimal con 2 decimales exactos
+          examples:
+            - "7.26"
+        interesCorriente:
+          type: string
+          pattern: ^-?\d{1,13}\.\d{2}$
+          description: Importe como cadena decimal con 2 decimales exactos
+          examples:
+            - "278.86"
+        capital:
+          type: string
+          pattern: ^-?\d{1,13}\.\d{2}$
+          description: Importe como cadena decimal con 2 decimales exactos
+          examples:
+            - "725.76"
+        excedente:
+          type: string
+          pattern: ^-?\d{1,13}\.\d{2}$
+          description: Remanente del pago después de saldar todo lo vencido; se aplica como adelanto a capital.
+          examples:
+            - "0.00"
+      required:
+        - gastos
+        - interesMoratorio
+        - interesCorriente
+        - capital
+        - excedente
+      additionalProperties: false
+      description: "Desglose del pago en el orden de prelación: gastos → moratorio → corriente → capital."
+    PagoRegistrado:
+      type: object
+      properties:
+        pagoId:
+          type: string
+          examples:
+            - PG-2026-000731
+        creditoId:
+          type: string
+          pattern: ^C-\d{3,8}$
+          description: Identificador del crédito
+          examples:
+            - C-004
+        recibidoEn:
+          type: string
+          description: Instante en formato RFC 3339 con zona horaria
+          examples:
+            - 2026-08-22T09:15:00-06:00
+        montoRecibido:
+          $ref: "#/components/schemas/Dinero"
+        aplicacion:
+          $ref: "#/components/schemas/AplicacionDelPago"
+        saldoCapitalDespues:
+          $ref: "#/components/schemas/Dinero"
+        estadoCredito:
+          $ref: "#/components/schemas/EstadoCredito"
+        tramoMora:
+          $ref: "#/components/schemas/TramoMora"
+        diasAtraso:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          examples:
+            - 0
+        reproducido:
+          type: boolean
+          description: true si esta respuesta es la reproducción de un pago ya registrado con la misma Idempotency-Key
+      required:
+        - pagoId
+        - creditoId
+        - recibidoEn
+        - montoRecibido
+        - aplicacion
+        - saldoCapitalDespues
+        - estadoCredito
+        - tramoMora
+        - diasAtraso
+        - reproducido
+      additionalProperties: false
+    ListarPagosResponse:
+      type: object
+      properties:
+        creditoId:
+          type: string
+          pattern: ^C-\d{3,8}$
+          description: Identificador del crédito
+          examples:
+            - C-004
+        pagos:
+          type: array
+          items:
+            $ref: "#/components/schemas/PagoRegistrado"
+        siguienteCursor:
+          type: string
+      required:
+        - creditoId
+        - pagos
+      additionalProperties: false
+    GenerarCierreDiarioRequest:
+      type: object
+      properties:
+        fechaCorte:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Fecha calendario en formato AAAA-MM-DD
+          examples:
+            - 2026-08-22
+      required:
+        - fechaCorte
+      additionalProperties: false
+    GenerarCierreMensualRequest:
+      type: object
+      properties:
+        mesCorte:
+          type: string
+          pattern: ^\d{4}-\d{2}$
+          description: Mes que se cierra, formato AAAA-MM
+          examples:
+            - 2026-08
+      required:
+        - mesCorte
+      additionalProperties: false
+    CierreResponse:
+      type: object
+      properties:
+        cierreId:
+          type: string
+          pattern: ^CI-\d{4}-\d{2}(-\d{2})?-[DM]$
+          description: Identificador del cierre (diario o mensual)
+          examples:
+            - CI-2026-08-22-D
+        tipo:
+          type: string
+          enum:
+            - diario
+            - mensual
+        fechaCorte:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Fecha calendario en formato AAAA-MM-DD
+          examples:
+            - 2026-08-22
+        carteraActiva:
+          $ref: "#/components/schemas/Dinero"
+        saldoEnRiesgo:
+          $ref: "#/components/schemas/Dinero"
+        dadoPorIncobrableEnElPeriodo:
+          $ref: "#/components/schemas/Dinero"
+        generadoEn:
+          type: string
+          description: Instante en formato RFC 3339 con zona horaria
+          examples:
+            - 2026-08-22T09:15:00-06:00
+        reproducido:
+          type: boolean
+          description: true si el cierre para esta fecha ya existía y se devolvió sin regenerarlo
+      required:
+        - cierreId
+        - tipo
+        - fechaCorte
+        - carteraActiva
+        - saldoEnRiesgo
+        - dadoPorIncobrableEnElPeriodo
+        - generadoEn
+        - reproducido
+      additionalProperties: false
+    CarteraEnRiesgoQuery:
+      type: object
+      properties:
+        fechaCorte:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Fecha calendario en formato AAAA-MM-DD
+          examples:
+            - 2026-08-22
+        incluirReestructurados:
+          description: Si se incluyen los créditos reestructurados en el saldo en riesgo. Por omisión true, conforme a la política institucional.
+          default: true
+          type: boolean
+      required:
+        - fechaCorte
+      additionalProperties: false
+    CarteraEnRiesgoResponse:
+      type: object
+      properties:
+        fechaCorte:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Fecha calendario en formato AAAA-MM-DD
+          examples:
+            - 2026-08-22
+        carteraActiva:
+          $ref: "#/components/schemas/Dinero"
+        saldoEnRiesgo:
+          $ref: "#/components/schemas/Dinero"
+        porcentajeEnRiesgo:
+          type: number
+          minimum: 0
+          maximum: 1
+          examples:
+            - 0.07
+        dadoPorIncobrableEnElPeriodo:
+          $ref: "#/components/schemas/Dinero"
+        porTramo:
+          type: array
+          items:
+            type: object
+            properties:
+              tramo:
+                type: string
+                enum:
+                  - mora_1
+                  - mora_2
+                  - mora_3
+                  - vencido
+              creditos:
+                type: integer
+                minimum: 0
+                maximum: 9007199254740991
+                examples:
+                  - 3
+              saldoCapital:
+                $ref: "#/components/schemas/Dinero"
+            required:
+              - tramo
+              - creditos
+              - saldoCapital
+            additionalProperties: false
+      required:
+        - fechaCorte
+        - carteraActiva
+        - saldoEnRiesgo
+        - porcentajeEnRiesgo
+        - dadoPorIncobrableEnElPeriodo
+        - porTramo
+      additionalProperties: false
